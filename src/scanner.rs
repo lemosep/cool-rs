@@ -1,6 +1,13 @@
-use std::fmt;
+//================================================================================
+//  Imports
+//================================================================================
 
+use std::fmt;
 use tracing::info;
+
+//================================================================================
+//  Structs
+//================================================================================
 
 pub struct Scanner {
     source: Vec<u8>,
@@ -45,8 +52,8 @@ impl Scanner {
             ':' => self.add_token(TokenType::COLON),
             '~' => self.add_token(TokenType::NEG),
             '+' => self.add_token(TokenType::ADD),
-            '-' => self.add_token(TokenType::SUB),
-            
+            '/' => self.add_token(TokenType::DIV),
+            '@' => self.add_token(TokenType::AT),
 
             // Multi-character operators
             '<' => {
@@ -70,6 +77,27 @@ impl Scanner {
                     self.add_token(TokenType::CASEASSIGN);
                 } else {
                     self.add_token(TokenType::EQ);
+                }
+            },
+            '(' => {
+                if self.match_next('*') {
+                    self.add_token(TokenType::OPENMC);
+                } else {
+                    self.add_token(TokenType::LPAREN);
+                }
+            },
+            '*' => {
+                if self.match_next(')') {
+                    self.add_token(TokenType::CLOSEMC);
+                } else {
+                    self.add_token(TokenType::MUL);
+                }
+            },
+            '-' => {
+                if self.match_next('-') {
+                    self.add_token(TokenType::SINGLECOMMENT);
+                } else {
+                    self.add_token(TokenType::SUB);
                 }
             },
             _ => {
@@ -119,10 +147,8 @@ impl Scanner {
     fn is_at_end(&self) -> bool {
         self.current >= self.source.len()
     }
-    
 
 }
-
 
 #[derive(Clone)]
 pub struct Token {
@@ -144,6 +170,10 @@ impl fmt::Debug for Token {
         )
     }
 }
+
+//================================================================================
+//  Enums
+//================================================================================
 
 #[derive(Debug, Clone)]
 pub enum TokenType {
@@ -200,6 +230,9 @@ pub enum TokenType {
     AT,
     ASSIGN,
     CASEASSIGN,
+    SINGLECOMMENT,
+    OPENMC,
+    CLOSEMC
 }
 
 #[derive(Debug, Clone)]
@@ -219,4 +252,3 @@ pub fn scan_tokens(input: String) {
     let mut scanner: Scanner = Scanner::default();
     scanner.scan_tokens(input.clone());
 }
-
