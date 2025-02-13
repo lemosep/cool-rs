@@ -1,0 +1,8 @@
+[package]
+name = "cool-rs"
+version = "0.1.0"
+authors = ["Eduardo Lemos Paschoalini"]
+edition = "2021"
+
+[dependencies]
+eyre = "0.6.12"
