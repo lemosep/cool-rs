@@ -1,5 +1,7 @@
 use std::fmt;
 
+use tracing::info;
+
 pub struct Scanner {
     source: Vec<u8>,
     tokens: Vec<Token>,
@@ -41,6 +43,10 @@ impl Scanner {
             '.' => self.add_token(TokenType::DOT),
             ';' => self.add_token(TokenType::SEMICOLON),
             ':' => self.add_token(TokenType::COLON),
+            '~' => self.add_token(TokenType::NEG),
+            '+' => self.add_token(TokenType::ADD),
+            '-' => self.add_token(TokenType::SUB),
+            
 
             // Multi-character operators
             '<' => {
@@ -66,6 +72,13 @@ impl Scanner {
                     self.add_token(TokenType::EQ);
                 }
             },
+            _ => {
+                info!(
+                     "Error: scanner cannot handle {}. Written at line {}",
+                     c,
+                     self.line
+                );
+            }
         }
     }
 
@@ -139,13 +152,11 @@ pub enum TokenType {
     SUB,
     MUL,
     DIV,
-    INVERSE,
+    NEG,
     LT,
     LTEQ,
     GT,
     GTEQ,
-    ASSIGN,
-    CASEASSIGN,
     EQ,
     
     // Keywords,
@@ -186,7 +197,9 @@ pub enum TokenType {
     RPAREN,
     LBRACKET,
     RBRACKET,
-    AT
+    AT,
+    ASSIGN,
+    CASEASSIGN,
 }
 
 #[derive(Debug, Clone)]
