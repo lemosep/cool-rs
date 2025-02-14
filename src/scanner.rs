@@ -145,13 +145,16 @@ impl Scanner {
                     self.handle_number();
                 } else if self.is_alpha(c) {
                     self.handle_identifier();
+                } else {
+                    println!(
+                        "Error: scanner cannot handle {}. Written at line {}",
+                        c,
+                        self.line
+                   );
                 }
 
-                println!(
-                     "Error: scanner cannot handle {}. Written at line {}",
-                     c,
-                     self.line
-                );
+                println!("{:?}", self.tokens);
+
             }
         }
     }
