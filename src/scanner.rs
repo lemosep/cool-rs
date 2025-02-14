@@ -114,7 +114,12 @@ impl Scanner {
                 self.handle_string();
             },
 
-            _ => {
+            c => {
+                if self.is_digit(c) {
+                    println!("Dis shit a digit!!");
+                    self.handle_number();
+                }
+
                 println!(
                      "Error: scanner cannot handle {}. Written at line {}",
                      c,
@@ -124,11 +129,6 @@ impl Scanner {
         }
     }
 
-    fn advance(&mut self) -> char {
-        self.current += 1;
-        char::from(self.source[self.current - 1])
-    }
-    
     fn add_token(&mut self, ty: TokenType) {
         self.add_token_literal(ty, None);
     }
@@ -158,6 +158,11 @@ impl Scanner {
         false
     }
 
+    fn advance(&mut self) -> char {
+        self.current += 1;
+        char::from(self.source[self.current - 1])
+    }
+
     ///# Description
     /// Retrieves the next character without
     /// consuming it.
@@ -170,6 +175,10 @@ impl Scanner {
         }
     }
 
+    ///# Description
+    /// Build the string contained between quotation marks
+    /// and add it's value to a `Literal::Str`
+    ///  
     fn handle_string(&mut self) {
         while self.peek() != '"' && !self.is_at_end() {
             if self.peek() == '\n' {
@@ -192,6 +201,24 @@ impl Scanner {
         println!("Added {} as literal", substring);
 
         self.add_token_literal(TokenType::STRING, Some(Literal::Str(substring)));
+    }
+
+    fn handle_number(&mut self) {
+        while self.is_digit(self.peek()) {
+            self.advance();
+        }
+
+        let mut val_str: String = String::new();
+        for &c in &self.source[self.start..self.current]{
+            val_str.push(char::from(c))
+        }
+
+        let value:i32 = val_str.parse().expect("Failed to parse string");
+        self.add_token_literal(TokenType::NUMBER, Some(Literal::Number(value)));
+    }
+
+    fn is_digit(&self, c: char) -> bool {
+        c >= '0' && c <= '9'
     }
 
     fn is_at_end(&self) -> bool {
@@ -287,7 +314,7 @@ pub enum TokenType {
 pub enum Literal {
     Identifier(String),
     Str(String),
-    Number(u64)
+    Number(i32)
 }
 
 //================================================================================
