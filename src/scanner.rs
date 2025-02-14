@@ -2,7 +2,7 @@
 //  Imports
 //================================================================================
 
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 //================================================================================
 //  Structs
@@ -11,6 +11,7 @@ use std::fmt;
 pub struct Scanner {
     source: Vec<u8>,
     tokens: Vec<Token>,
+    keywords: HashMap<String, TokenType>,
     start: usize,
     current: usize,
     line: usize
@@ -23,7 +24,31 @@ impl Default for Scanner {
             tokens: Vec::new(),
             start: 0,
             current: 0,
-            line: 1
+            line: 1,
+            keywords: vec![
+                ("if", TokenType::IF),
+                ("fi", TokenType::FI),
+                ("else", TokenType::ELSE),
+                ("true", TokenType::TRUE),
+                ("false", TokenType::FALSE),
+                ("in", TokenType::IN),
+                ("loop", TokenType::LOOP),
+                ("pool", TokenType::POOL),
+                ("let", TokenType::LET),
+                ("while", TokenType::WHILE),
+                ("then", TokenType::THEN),
+                ("case", TokenType::CASE),
+                ("esac", TokenType::ESAC),
+                ("new", TokenType::NEW),
+                ("of", TokenType::OF),
+                ("not", TokenType::NOT),
+                ("class", TokenType::CLASS),
+                ("isvoid", TokenType::ISVOID),
+                ("inherits", TokenType::INHERITS),
+            ]
+            .into_iter()
+            .map(|(k,v)| (String::from(k), v))
+            .collect(),
         }
     }
 }
@@ -118,13 +143,18 @@ impl Scanner {
                 if self.is_digit(c) {
                     println!("Dis shit a digit!!");
                     self.handle_number();
+                } else if self.is_alpha(c) {
+                    self.handle_identifier();
+                } else {
+                    println!(
+                        "Error: scanner cannot handle {}. Written at line {}",
+                        c,
+                        self.line
+                   );
                 }
 
-                println!(
-                     "Error: scanner cannot handle {}. Written at line {}",
-                     c,
-                     self.line
-                );
+                println!("{:?}", self.tokens);
+
             }
         }
     }
@@ -203,6 +233,10 @@ impl Scanner {
         self.add_token_literal(TokenType::STRING, Some(Literal::Str(substring)));
     }
 
+    ///# Description
+    /// Fetches the `String` containing the numeric
+    /// literal and adds it as a new i32 token.
+    /// 
     fn handle_number(&mut self) {
         while self.is_digit(self.peek()) {
             self.advance();
@@ -215,6 +249,36 @@ impl Scanner {
 
         let value:i32 = val_str.parse().expect("Failed to parse string");
         self.add_token_literal(TokenType::NUMBER, Some(Literal::Number(value)));
+    }
+
+    fn handle_identifier(&mut self) {
+        while self.is_alphanumeric(self.peek()) {
+            self.advance();
+        }
+
+        let mut text: String = String::new();
+        for &c in &self.source[self.start..self.current] {
+            text.push(char::from(c));
+        }
+
+        let mut ty: Option<TokenType> = self.keywords.get(&text).clone().cloned();
+
+        match ty {
+            Some(_) => (),
+            None => ty = Some(TokenType::IDENTIFIER),
+        }
+
+        self.add_token(ty.unwrap());
+    }
+
+    fn is_alphanumeric(&self, c: char) -> bool {
+        self.is_alpha(c) || self.is_digit(c)
+    }
+
+    fn is_alpha(&self, c: char) -> bool {
+        (c >= 'a' && c <= 'z') ||
+        (c >= 'A' && c <= 'Z') ||
+        c == '_'
     }
 
     fn is_digit(&self, c: char) -> bool {
