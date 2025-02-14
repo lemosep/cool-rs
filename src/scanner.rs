@@ -3,7 +3,6 @@
 //================================================================================
 
 use std::fmt;
-use tracing::info;
 
 //================================================================================
 //  Structs
@@ -95,13 +94,28 @@ impl Scanner {
             },
             '-' => {
                 if self.match_next('-') {
-                    self.add_token(TokenType::SINGLECOMMENT);
+                    // Ignore single-lined comments
+                    while self.peek() != '\n' && !self.is_at_end() {
+                        self.advance();
+                    }
                 } else {
                     self.add_token(TokenType::SUB);
                 }
             },
+
+            // Ingnore whitespace
+            ' ' | '\r' | '\t' => (),
+            '\n' => {
+                self.line += 1;
+            },
+            
+            // String literals
+            '"' => {
+                self.handle_string();
+            },
+
             _ => {
-                info!(
+                println!(
                      "Error: scanner cannot handle {}. Written at line {}",
                      c,
                      self.line
@@ -129,12 +143,12 @@ impl Scanner {
            line: self.line, 
         });
     }
-
+    
     fn match_next(&mut self, expected: char) -> bool {
         if self.is_at_end() {
             return false
         }
-
+    
         let c: char = char::from(self.source[self.current]);
         if c == expected {
             self.current += 1;
@@ -144,10 +158,45 @@ impl Scanner {
         false
     }
 
+    ///# Description
+    /// Retrieves the next character without
+    /// consuming it.
+    /// 
+    fn peek(&self) -> char {
+        if self.is_at_end() {
+            return '\0';
+        } else {
+            return char::from(self.source[self.current]);
+        }
+    }
+
+    fn handle_string(&mut self) {
+        while self.peek() != '"' && !self.is_at_end() {
+            if self.peek() == '\n' {
+                self.line += 1;
+            }
+            self.advance();
+        }
+
+        if self.is_at_end() {
+            println!("Error: unterminated string");
+        }
+
+        self.advance();
+
+        let mut substring: String = String::new();
+        for &val in &self.source[self.start + 1..self.current - 1] {
+            substring.push(char::from(val));
+        }
+
+        println!("Added {} as literal", substring);
+
+        self.add_token_literal(TokenType::STRING, Some(Literal::Str(substring)));
+    }
+
     fn is_at_end(&self) -> bool {
         self.current >= self.source.len()
     }
-
 }
 
 #[derive(Clone)]
@@ -230,7 +279,6 @@ pub enum TokenType {
     AT,
     ASSIGN,
     CASEASSIGN,
-    SINGLECOMMENT,
     OPENMC,
     CLOSEMC
 }
