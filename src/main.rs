@@ -2,18 +2,37 @@
 //  Imports
 //================================================================================
 
-use std::fs;
+use std::{fs, path::PathBuf};
 mod scanner;
+
+use clap::Parser;
+
+//================================================================================
+//  CLI
+//================================================================================
+
+#[derive(Parser)]
+struct Cli {
+    #[arg(short, long, value_name="FILE")]
+    file: PathBuf
+}
 
 //================================================================================
 //  Standalone Functions
 //================================================================================
 
 fn main() -> eyre::Result<()> {
-    let file_path: String = String::from("./tests/hello.cl");
-    let source: String = read_file(file_path)?;
+    let cli = Cli::parse();
 
-    scanner::scan_tokens(source);
+    let file_path = if let Some(p) = cli.file.to_str() {
+        p
+    } else {
+        panic!("Error: required argument missing: file")
+    };
+
+    let source: String = read_file(file_path.to_owned())?;
+
+    scanner::scan_tokens(&source);
 
     Ok(())
 }

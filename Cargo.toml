@@ -5,4 +5,5 @@ authors = ["Eduardo Lemos Paschoalini"]
 edition = "2021"
 
 [dependencies]
+clap = { version = "4.5.30", features = ["derive"] }
 eyre = "0.6.12"
