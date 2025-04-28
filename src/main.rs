@@ -1,42 +1,53 @@
-//================================================================================
-//  Imports
-//================================================================================
-
 use std::{fs, path::PathBuf};
-mod scanner;
-
 use clap::Parser;
+use eyre::{Result, Context};
 
-//================================================================================
-//  CLI
-//================================================================================
+mod ast;
+mod parsing;
+mod cool;
 
+/// Command-line options
 #[derive(Parser)]
+#[command(name = "cool-rs", version, about = "A COOL language parser")] 
 struct Cli {
-    #[arg(short, long, value_name="FILE")]
-    file: PathBuf
+    /// Path to the input COOL source file
+    #[arg(short, long, value_name = "FILE")]
+    file: PathBuf,
 }
 
-//================================================================================
-//  Standalone Functions
-//================================================================================
+/// Read the entire file into a String, with context on errors
+fn read_file(path: &PathBuf) -> Result<String> {
+    fs::read_to_string(path)
+        .wrap_err_with(|| format!("Failed to read source file: {:?}", path))
+}
 
 fn main() -> eyre::Result<()> {
+    // Parse CLI arguments
     let cli = Cli::parse();
 
-    let file_path = if let Some(p) = cli.file.to_str() {
-        p
-    } else {
-        panic!("Error: required argument missing: file")
-    };
+    // Load source
+    let source = read_file(&cli.file)?;
 
-    let source: String = read_file(file_path.to_owned())?;
+    // Lexing
+    let mut scanner = parsing::scanner::Scanner::new(&source);
+    let tokens = scanner
+        .scan_tokens().unwrap();
 
-    scanner::scan_tokens(&source);
+    let token_iter = tokens
+        .into_iter()
+        .map(|(tok, loc)| {
+        Ok((loc, tok, loc))
+        });
+
+    let ast: Vec<ast::Class> = cool::ProgramParser::new()
+        .parse(token_iter)
+        .wrap_err("Parsing failed")?;
+
+    // Display the parsed AST
+    println!("Parsed AST ({} classes):", ast.len());
+    for class in ast {
+        println!("{:#?}", class);
+    }
 
     Ok(())
-}
-
-fn read_file(path: String) -> Result<String, std::io::Error> {
-    Ok(fs::read_to_string(path)?)    
 }
