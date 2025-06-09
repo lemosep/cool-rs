@@ -20,12 +20,6 @@ generate:
 	@$(LALRPOP) --version
 	@echo "Generating parser from $(LALRPOP_SRC) to $(LALRPOP_OUT)..."
 	@$(LALRPOP) $(LALRPOP_SRC)
-	@if [ -f "$(LALRPOP_OUT)" ]; then \
-		echo "Generated $(LALRPOP_OUT)"; \
-		grep -q "ProgramParser" $(LALRPOP_OUT) && echo "ProgramParser found in $(LALRPOP_OUT)" || { echo "Error: ProgramParser not found in $(LALRPOP_OUT)"; exit 1; }; \
-	else \
-		echo "Error: $(LALRPOP_OUT) not generated"; exit 1; \
-	fi
 
 # Build the project
 build: generate

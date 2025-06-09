@@ -1,250 +1,340 @@
-use crate::parsing::token::{Token, Loc, LexicalError};
-use crate::ast::*;
+use crate::parsing::token::{Token, LexicalError};
+use crate::ast::{Expr, TypedExpr, Program, Class, Feature, ArgDecl, CaseBranch};
+use crate::ast::{ComparisonOperator, MathOperator, UnaryOperator};
 
-grammar<'input>;
-
-pub Program = <class*>;
-
-class: Class = {
-    "CLASS" <tid:"TYPE"> "{" <f:feature*> "}" ";" => Class {
-        inherits: None,
-        name: tid,
-        feature_list: f
-    },
-    "CLASS" <tid:"TYPE"> "INHERITS" <s:"TYPE"> "{" <f:feature*> "}" ";" => Class {
-        inherits: Some(s),
-        name: tid,
-        feature_list: f,
-    },
-};
-
-feature: Feature = {
-    // Attributes
-    <oid:"ID"> ":" <tid:"TYPE"> ";" => {
-        Feature::Attribute(VarDecl {
-            oid: oid,
-            tid: tid,
-            expr: Box::new(None),
-        })
-    },
-    <oid:"ID"> ":" <tid:"TYPE"> "ASSIGN" <e:expr> ";" => {
-        Feature::Attribute(VarDecl {
-            oid: oid,
-            tid: tid,
-            expr: Box::new(Some(e)),
-        })
-    },
-    // Methods
-    <oid:"ID"> "(" <a:comma_list<arg_decl>?> ")" ":" <rtype:"TYPE"> "{" "}" ";" => {
-        Feature::Method(oid, Box::new(a.unwrap_or(vec![])), rtype, Box::new(None))
-    },
-    <oid:"ID"> "(" <a:comma_list<arg_decl>?> ")" ":" <rtype:"TYPE"> "{" <e:expr> "}" ";" => {
-        Feature::Method(oid, Box::new(a.unwrap_or(vec![])), rtype, Box::new(Some(e)))
-    },
-};
-
-arg_decl: ArgDecl = {
-    <id:"STR"> <tid:"TYPE"> => ArgDecl { id, tid },
-};
-
-
-dispatch: Expr = {
-    <e:dispatchable_expr> "@" <tid:"TYPE"> "." <id:"ID"> "(" <args:comma_list<expr>?> ")" => {
-        Expr::Dispatch {
-            target: Box::new(Some(e)),
-            targettype: Some(tid),
-            id: id,
-            exprs: Box::new(args.unwrap_or(vec![])),
-        }
-    },
-    <e:dispatchable_expr> "." <id:"ID"> "(" <args:comma_list<expr>?> ")" => {
-        Expr::Dispatch {
-            target: Box::new(Some(e)),
-            targettype: None,
-            id: id,
-            exprs: Box::new(args.unwrap_or(vec![])),
-        }
-    },
-    <id:"ID"> "(" <args:comma_list<expr>?> ")" => {
-        Expr::Dispatch {
-            target: Box::new(None),
-            targettype: None,
-            id: id,
-            exprs: Box::new(args.unwrap_or(vec![])),
-        }
-    },
-};
-
-dispatchable_expr: Expr = {
-    dispatch,
-    atom,
-    "NEW" <tid:"TYPE"> => Expr::New(tid),
-    "{" <e:expr_list_semicolon+> "}" => Expr::Block(Box::new(e)),
-    "CASE" <e:expr> "OF" <branches:case_branch+> "ESAC" => {
-        Expr::Case(Box::new(e), Box::new(branches))
-    },
-    "(" <e:expr> ")" => Expr::Paren(Box::new(e)),
-};
-
-atom: Expr = {
-    <id:"ID"> => Expr::Identifier(id),
-    <b:"BOOL"> => Expr::Bool(b),
-    <i:"INT"> => Expr::Int(i.parse().unwrap()),
-    <s:"STR"> => Expr::Str(s),
-};
-
-let: Expr = {
-    "LET" "IN" <e:expr> => Expr::Let(Box::new(vec![]), Box::new(e)),
-};
-
-comparison_expr: Expr = {
-    <lhs:comparison_expr> <op:comparison_op> <rhs:math_expr> => Expr::Comparison {
-        lhs: Box::new(lhs),
-        op,
-        rhs: Box::new(rhs),
-    },
-    math_expr,
-};
-
-math_expr: Expr = {
-    <lhs:math_expr> <op:math_op_plus_minus> <rhs:math_term> => Expr::Math {
-        lhs: Box::new(lhs),
-        op,
-        rhs: Box::new(rhs),
-    },
-    math_term,
-};
-
-comparison_op: ComparisonOperator = {
-    "<" => ComparisonOperator::Lt,
-    "<=" => ComparisonOperator::Le,
-    "=" => ComparisonOperator::Equal,
-}
-
-math_op_plus_minus: MathOperator = {
-    "+" => MathOperator::Add,
-    "-" => MathOperator::Subtract,
-};
-
-math_term: Expr = {
-    <lhs:math_term> <op:math_op_mul_div> <rhs:unary_expr> => Expr::Math {
-        lhs: Box::new(lhs),
-        op,
-        rhs: Box::new(rhs),
-    },
-    unary_expr,
-};
-
-unary_op: UnaryOperator = {
-    "~" => UnaryOperator::Neg,
-    "NOT" => UnaryOperator::Not,
-};
-
-unary_expr: Expr = {
-    <op:unary_op> <s:dispatchable_expr> => Expr::UnaryOperation {
-        op,
-        s: Box::new(s),
-    },
-    dispatchable_expr,
-};
-
-math_op_mul_div: MathOperator = {
-    "*" => MathOperator::Mul,
-    "/" => MathOperator::Div,
-};
-
-expr: Expr = {
-    let,
-    comparison_expr,
-    // Assign
-    <oid:"ID"> "ASSIGN" <e:expr> => Expr::Assignment(oid, Box::new(e)),
-    // If
-    "IF" <test:expr> "THEN" <then:expr> "ELSE" <orelse:expr> "FI" => {
-        Expr::Conditional {
-            test: Box::new(test),
-            then: Box::new(then),
-            orelse: Box::new(orelse),
-        }
-    },
-    "WHILE" <test:expr> "LOOP" <exec:expr> "POOL" => {
-        Expr::While {
-            test: Box::new(test),
-            exec: Box::new(exec),
-        }
-    },
-    "ISVOID" <e:expr> => Expr::Isvoid(Box::new(e)),
-};
-
-case_branch: CaseBranch = {
-    <id:"ID"> ":" <tid:"TYPE"> <e:expr> ";" => {
-        CaseBranch {
-            id: id,
-            tid: tid,
-            expr: Box::new(e),
-        }
-    }
-};
-
-expr_list_semicolon: Expr = {
-    <e:expr> ";" => e,
-};
-
-#[inline]
-comma_list<T>: Vec<T> = {
-    <i1: T> <i2:("," T)*> => {
-        let mut items = vec![i1];
-        items.extend(i2.into_iter().map(|e| e.1));
-        items
-    }
-};
+grammar;
 
 extern {
-    type Location = Loc;
+    type Location = usize;
     type Error = LexicalError;
 
-    // Map parser terms to token values:
     enum Token {
-        "CLASS" => Token::Class_,
-        "ELSE" => Token::Else,
-        "FI" => Token::Fi,
-        "IF" => Token::If,
-        "IN" => Token::In,
-        "INHERITS" => Token::Inherits,
-        "LET" => Token::Let,
-        "LOOP" => Token::Loop,
-        "POOL" => Token::Pool,
-        "THEN" => Token::Then,
-        "WHILE" => Token::While,
-        "CASE" => Token::Case,
-        "ESAC" => Token::Esac,
-        "OF" => Token::Of,
-        "NEW" => Token::New,
-        "ISVOID" => Token::Isvoid,
-        "NOT" => Token::Not,
-        "STR" => Token::StrConst(<String>),
-        "INT" => Token::IntConst(<String>),
-        "BOOL" => Token::BoolConst(<bool>),
-        "TYPE" => Token::Typeid(<String>),
-        "ID" => Token::Objectid(<String>),
-        "DARROW" => Token::Darrow,
-        "ASSIGN" => Token::Assign,
-        "<=" => Token::Le,
-        "{" => Token::Lbrace,
-        "}" => Token::Rbrace,
-        "(" => Token::Lparen,
-        ")" => Token::Rparen,
-        ":" => Token::Colon,
-        ";" => Token::Semicolon,
-        "@" => Token::At,
-        "+" => Token::Plus,
-        "-" => Token::Minus,
-        "/" => Token::Divide,
-        "*" => Token::Mul,
-        "~" => Token::Neg,
-        "=" => Token::Equal,
-        "<" => Token::Lt,
-        "." => Token::Period,
-        "," => Token::Comma,
-        "ERROR" => Token::Error(<String>),
+        ";"           => Token::Semicolon,
+        ":"           => Token::Colon,
+        "class"       => Token::Class_,
+        "typeid"      => Token::Typeid(<String>),
+        "objectid"    => Token::Objectid(<String>),
+        "bool_const"  => Token::BoolConst(<bool>),
+        "int_const"   => Token::IntConst(<String>),
+        // Now `StrConst(<String>)` instead of a Result
+        "str_const"   => Token::StrConst(<String>),
+        "{"           => Token::Lbrace,
+        "}"           => Token::Rbrace,
+        "("           => Token::Lparen,
+        ")"           => Token::Rparen,
+        "<-"          => Token::Assign,
+        ","           => Token::Comma,
+        "new"         => Token::New,
+        "if"          => Token::If,
+        "then"        => Token::Then,
+        "else"        => Token::Else,
+        "fi"          => Token::Fi,
+        "of"          => Token::Of,
+        "while"       => Token::While,
+        "inherits"    => Token::Inherits,
+        "loop"        => Token::Loop,
+        "pool"        => Token::Pool,
+        "."           => Token::Period,
+        "@"           => Token::At,
+        "~"           => Token::Neg,
+        "isvoid"      => Token::Isvoid,
+        "="           => Token::Equal,
+        "<"           => Token::Lt,
+        "<="          => Token::Le,
+        "not"         => Token::Not,
+        "+"           => Token::Plus,
+        "-"           => Token::Minus,
+        "*"           => Token::Mul,
+        "/"           => Token::Divide,
+        "let"         => Token::Let,
+        "in"          => Token::In,
+        "error"       => Token::Error(_),
+        "case"        => Token::Case,
+        "esac"        => Token::Esac,
+        "=>"          => Token::Darrow,
     }
+}
+
+pub ProgramTy: Program = {
+    <start:@L> <clist:ClassesTy> <end:@R> => Program::new(clist),
+}
+
+pub ClassTy: Class = {
+    <start:@L> "class" <name:"typeid"> "{" <features:FeaturesTy> "}" ";" <end:@R> =>
+        Class::new(name.clone(), None, features),
+    <start:@L> "class" <name:"typeid"> "inherits" <parent:"typeid"> "{" <features:FeaturesTy> "}" ";" <end:@R> =>
+        Class::new(name.clone(), Some(parent.clone()), features),
+}
+
+pub ClassesTy: Vec<Class> = {
+    <c:ClassTy> => vec![c],
+    <cs:ClassesTy> <c:ClassTy> => {
+        let mut v = cs;
+        v.push(c);
+        v
+    },
+}
+
+pub FormalTy: ArgDecl = {
+    <name:"objectid"> ":" <typ:"typeid"> => ArgDecl::new(name.clone(), typ.clone()),
+}
+
+pub _SomeFormalsTy: Vec<ArgDecl> = {
+    <f:FormalTy> => vec![f],
+    <some:_SomeFormalsTy> "," <f:FormalTy> => {
+        let mut v = some;
+        v.push(f);
+        v
+    },
+}
+
+pub FormalsTy: Vec<ArgDecl> = {
+    () => vec![],
+    <some:_SomeFormalsTy> => some,
+}
+
+pub FeatureTy: Feature = {
+    <start:@L> <name:"objectid"> ":" <typ:"typeid"> ";" <end:@R> => {
+        Feature::new_attribute(name.clone(), typ.clone(), None)
+    },
+    <start:@L> <name:"objectid"> ":" <typ:"typeid"> "<-" <expr:ExprTy> ";" <end:@R> => {
+        Feature::new_attribute(name.clone(), typ.clone(), Some(expr))
+    },
+    <start:@L> <name:"objectid"> "(" <formals:FormalsTy> ")" ":" <typ:"typeid"> "{" <expr:ExprTy> "}" ";" <end:@R> => {
+        Feature::new_method(name.clone(), formals, typ.clone(), expr)
+    },
+}
+
+pub FeaturesTy: Vec<Feature> = {
+    () => vec![],
+    <fs:FeaturesTy> <f:FeatureTy> => {
+        let mut v = fs;
+        v.push(f);
+        v
+    },
+}
+
+pub ExprTy: TypedExpr = {
+    <start:@L> <mut e:Expr10Ty> <end:@R> => e,
+}
+
+pub Expr10Ty: TypedExpr = {
+    <start:@L> "let" <let_bindings:LetBindingsTy> "in" <body:ExprTy> => {
+        TypedExpr::new(Expr::Let(let_bindings, Box::new(body)), start)
+    },
+    <e:Expr9Ty> => e,
+}
+
+pub Expr9Ty: TypedExpr = {
+    <start:@L> <var:"objectid"> "<-" <expr:Expr9Ty> => {
+        let asign = Expr::Assignment(var.clone(), Box::new(expr));
+        TypedExpr::new(asign, start)
+    },
+    <e:Expr8Ty> => e,
+}
+
+pub Expr8Ty: TypedExpr = {
+    <start:@L> "not" <e:Expr7Ty> => {
+        let u = Expr::UnaryOperation { op: UnaryOperator::Not, s: Box::new(e) };
+        TypedExpr::new(u, start)
+    },
+    <e:Expr7Ty> => e,
+}
+
+pub Expr7Ty: TypedExpr = {
+    <start:@L> <e1:Expr7Ty> "=" <e2:Expr6Ty> => {
+        let cmp = Expr::Comparison { lhs: Box::new(e1), op: ComparisonOperator::Equal, rhs: Box::new(e2) };
+        TypedExpr::new(cmp, start)
+    },
+    <start:@L> <e1:Expr7Ty> "<=" <e2:Expr6Ty> => {
+        let cmp = Expr::Comparison { lhs: Box::new(e1), op: ComparisonOperator::Le, rhs: Box::new(e2) };
+        TypedExpr::new(cmp, start)
+    },
+    <start:@L> <e1:Expr7Ty> "<" <e2:Expr6Ty> => {
+        let cmp = Expr::Comparison { lhs: Box::new(e1), op: ComparisonOperator::Lt, rhs: Box::new(e2) };
+        TypedExpr::new(cmp, start)
+    },
+    <e:Expr6Ty> => e,
+}
+
+pub Expr6Ty: TypedExpr = {
+    <start:@L> <e1:Expr6Ty> "+" <e2:Expr5Ty> => {
+        let m = Expr::Math { lhs: Box::new(e1), op: MathOperator::Add, rhs: Box::new(e2) };
+        TypedExpr::new(m, start)
+    },
+    <start:@L> <e1:Expr6Ty> "-" <e2:Expr5Ty> => {
+        let m = Expr::Math { lhs: Box::new(e1), op: MathOperator::Subtract, rhs: Box::new(e2) };
+        TypedExpr::new(m, start)
+    },
+    <e:Expr5Ty> => e,
+}
+
+pub Expr5Ty: TypedExpr = {
+    <start:@L> <e1:Expr5Ty> "*" <e2:Expr4Ty> => {
+        let m = Expr::Math { lhs: Box::new(e1), op: MathOperator::Mul, rhs: Box::new(e2) };
+        TypedExpr::new(m, start)
+    },
+    <start:@L> <e1:Expr5Ty> "/" <e2:Expr4Ty> => {
+        let m = Expr::Math { lhs: Box::new(e1), op: MathOperator::Div, rhs: Box::new(e2) };
+        TypedExpr::new(m, start)
+    },
+    <e:Expr4Ty> => e,
+}
+
+pub Expr4Ty: TypedExpr = {
+    <start:@L> "isvoid" <expr:Expr3Ty> => {
+        let iv = Expr::Isvoid(Box::new(expr));
+        TypedExpr::new(iv, start)
+    },
+    <e:Expr3Ty> => e,
+}
+
+pub Expr3Ty: TypedExpr = {
+    <start:@L> "~" <expr:Expr2Ty> => {
+        let u = Expr::UnaryOperation { op: UnaryOperator::Neg, s: Box::new(expr) };
+        TypedExpr::new(u, start)
+    },
+    <e:Expr2Ty> => e,
+}
+
+pub Expr2Ty: TypedExpr = {
+    <start:@L> <slf:Expr1Ty> "@" <typ:"typeid"> "." <method_name:"objectid"> "(" <exprs:CommaSepExprsTy> ")" => {
+        let dispatch = Expr::Dispatch {
+            target: Some(Box::new(slf)),
+            targettype: Some(typ.clone()),
+            id: method_name.clone(),
+            exprs,
+        };
+        TypedExpr::new(dispatch, start)
+    },
+    <start:@L> <method_name:"objectid"> "(" <exprs:CommaSepExprsTy> ")" => {
+        let dispatch = Expr::Dispatch {
+            target: None,
+            targettype: None,
+            id: method_name.clone(),
+            exprs,
+        };
+        TypedExpr::new(dispatch, start)
+    },
+    <e:Expr1Ty> => e,
+}
+
+pub Expr1Ty: TypedExpr = {
+    <start:@L> <slf:Expr0Ty> "." <method_name:"objectid"> "(" <exprs:CommaSepExprsTy> ")" => {
+        let dispatch = Expr::Dispatch {
+            target: Some(Box::new(slf)),
+            targettype: None,
+            id: method_name.clone(),
+            exprs,
+        };
+        TypedExpr::new(dispatch, start)
+    },
+    <e:Expr0Ty> => e,
+}
+
+pub Expr0Ty: TypedExpr = {
+    <start:@L> "{" <exprs:ExprsWithSemicolonsTy> "}" => {
+        let block = Expr::Block(exprs.clone());
+        let line = exprs.first().map(|e| e.line).unwrap_or(start);
+        TypedExpr::new(block, line)
+    },
+    <start:@L> "new" <typ:"typeid"> => {
+        let n = Expr::New(typ.clone());
+        TypedExpr::new(n, start)
+    },
+    <start:@L> "while" <cond:ExprTy> "loop" <body:ExprTy> "pool" => {
+        let w = Expr::While { test: Box::new(cond), exec: Box::new(body) };
+        TypedExpr::new(w, start)
+    },
+    <start:@L> "case" <expr:ExprTy> "of" <cases:CasesTy> "esac" => {
+        let c = Expr::Case(Box::new(expr), cases);
+        TypedExpr::new(c, start)
+    },
+    <start:@L> "if" <pred:ExprTy> "then" <then_expr:ExprTy> "else" <else_expr:ExprTy> "fi" => {
+        let c = Expr::Conditional {
+            test: Box::new(pred),
+            then: Box::new(then_expr),
+            orelse: Box::new(else_expr),
+        };
+        TypedExpr::new(c, start)
+    },
+    <line:@L> <name:"objectid"> => {
+        let id_expr = Expr::Identifier(name.clone());
+        TypedExpr::new(id_expr, line)
+    },
+    <line:@L> <value:"int_const"> => {
+        let v = value.parse::<i32>().unwrap_or(0);
+        let i_expr = Expr::Int(v);
+        TypedExpr::new(i_expr, line)
+    },
+    <line:@L> <maybe_value:"str_const"> => {
+        // removed `.unwrap()`: just clone the String
+        let s = maybe_value.clone();
+        let st = Expr::Str(s);
+        TypedExpr::new(st, line)
+    },
+    <value:BoolConstTy> => {
+        let b_expr = Expr::Bool(value.0);
+        TypedExpr::new(b_expr, value.1)
+    },
+    "(" <expr:ExprTy> ")" => {
+        let p = Expr::Paren(Box::new(expr.clone()));
+        TypedExpr::new(p, expr.line)
+    },
+}
+
+pub BoolConstTy: (bool, usize) = {
+    <line:@L> <value:"bool_const"> => (value, line)
+}
+
+pub CommaSepExprsTy: Vec<TypedExpr> = {
+    () => vec![],
+    <some:_SomeCommaSepExprTy> => some,
+}
+
+pub _SomeCommaSepExprTy: Vec<TypedExpr> = {
+    <e:ExprTy> => vec![e],
+    <some:_SomeCommaSepExprTy> "," <f:ExprTy> => {
+        let mut v = some;
+        v.push(f);
+        v
+    },
+}
+
+pub ExprsWithSemicolonsTy: Vec<TypedExpr> = {
+    <e:ExprTy> ";" => vec![e],
+    <es:ExprsWithSemicolonsTy> <e:ExprTy> ";" => {
+        let mut v = es;
+        v.push(e);
+        v
+    },
+}
+
+pub CaseTy: CaseBranch = {
+    <start:@L> <name:"objectid"> ":" <typ:"typeid"> "=>" <expr:ExprTy> ";" <end:@R> => {
+        CaseBranch::new(name.clone(), typ.clone(), expr)
+    }
+}
+
+pub CasesTy: Vec<CaseBranch> = {
+    <c:CaseTy> => vec![c],
+    <cs:CasesTy> <c:CaseTy> => {
+        let mut v = cs;
+        v.push(c);
+        v
+    },
+}
+
+pub LetBindingTy: (String, String, Option<TypedExpr>) = {
+    <id:"objectid"> ":" <typ:"typeid"> => (id.clone(), typ.clone(), None),
+    <id:"objectid"> ":" <typ:"typeid"> "<-" <expr:ExprTy> => (id.clone(), typ.clone(), Some(expr)),
+}
+
+pub LetBindingsTy: Vec<(String, String, Option<TypedExpr>)> = {
+    <binding:LetBindingTy> => vec![binding],
+    <bs:LetBindingsTy> "," <b:LetBindingTy> => {
+        let mut v = bs;
+        v.push(b);
+        v
+    },
 }

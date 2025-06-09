@@ -7,22 +7,22 @@ pub struct Program {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Class {
-    pub inherits: Option<String>,
     pub name: String,
+    pub inherits: Option<String>,
     pub feature_list: Vec<Feature>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Feature {
     Attribute(VarDecl),
-    Method(String, Box<Vec<ArgDecl>>, String, Box<Option<Expr>>),
+    Method(String, Vec<ArgDecl>, String, TypedExpr),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct VarDecl {
     pub oid: String,
     pub tid: String,
-    pub expr: Box<Option<Expr>>,
+    pub expr: Option<TypedExpr>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -32,54 +32,54 @@ pub struct ArgDecl {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct CaseBranch {
+    pub id: String,
+    pub tid: String,
+    pub expr: TypedExpr,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Identifier(String),
     Bool(bool),
     Int(i32),
     Str(String),
     New(String),
-    Block(Box<Vec<Expr>>),
-    Case(Box<Expr>, Box<Vec<CaseBranch>>),
-    Paren(Box<Expr>),
-    Let(Box<Vec<()>>, Box<Expr>),
+    Block(Vec<TypedExpr>),
+    Case(Box<TypedExpr>, Vec<CaseBranch>),
+    Paren(Box<TypedExpr>),
+    Let(Vec<(String, String, Option<TypedExpr>)>, Box<TypedExpr>),
     Comparison {
-        lhs: Box<Expr>,
+        lhs: Box<TypedExpr>,
         op: ComparisonOperator,
-        rhs: Box<Expr>,
+        rhs: Box<TypedExpr>,
     },
     Math {
-        lhs: Box<Expr>,
+        lhs: Box<TypedExpr>,
         op: MathOperator,
-        rhs: Box<Expr>,
+        rhs: Box<TypedExpr>,
     },
     UnaryOperation {
         op: UnaryOperator,
-        s: Box<Expr>,
+        s: Box<TypedExpr>,
     },
-    Assignment(String, Box<Expr>),
+    Assignment(String, Box<TypedExpr>),
     Conditional {
-        test: Box<Expr>,
-        then: Box<Expr>,
-        orelse: Box<Expr>,
+        test: Box<TypedExpr>,
+        then: Box<TypedExpr>,
+        orelse: Box<TypedExpr>,
     },
     While {
-        test: Box<Expr>,
-        exec: Box<Expr>,
+        test: Box<TypedExpr>,
+        exec: Box<TypedExpr>,
     },
-    Isvoid(Box<Expr>),
+    Isvoid(Box<TypedExpr>),
     Dispatch {
-        target: Box<Option<Expr>>,
+        target: Option<Box<TypedExpr>>,
         targettype: Option<String>,
         id: String,
-        exprs: Box<Vec<Expr>>,
+        exprs: Vec<TypedExpr>,
     },
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct CaseBranch {
-    pub id: String,
-    pub tid: String,
-    pub expr: Box<Expr>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -103,6 +103,23 @@ pub enum UnaryOperator {
     Not,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypedExpr {
+    pub expr: Expr,
+    pub static_type: Option<String>,
+    pub line: usize,
+}
+
+impl TypedExpr {
+    pub fn new(expr: Expr, line: usize) -> Self {
+        TypedExpr {
+            expr,
+            static_type: None,
+            line,
+        }
+    }
+}
+
 impl Program {
     pub fn new(classes: Vec<Class>) -> Self {
         Program { classes }
@@ -120,32 +137,34 @@ impl Class {
 }
 
 impl Feature {
-    pub fn new_attribute(decl: VarDecl) -> Self {
-        Feature::Attribute(decl)
+    pub fn new_attribute(oid: String, tid: String, init: Option<TypedExpr>) -> Self {
+        Feature::Attribute(VarDecl { oid, tid, expr: init })
     }
 
     pub fn new_method(
         name: String,
         args: Vec<ArgDecl>,
         return_type: String,
-        body: Option<Expr>,
+        body: TypedExpr,
     ) -> Self {
-        Feature::Method(name, Box::new(args), return_type, Box::new(body))
+        Feature::Method(name, args, return_type, body)
     }
 }
 
 impl VarDecl {
-    pub fn new(oid: String, tid: String, expr: Option<Expr>) -> Self {
-        VarDecl {
-            oid,
-            tid,
-            expr: Box::new(expr),
-        }
+    pub fn new(oid: String, tid: String, expr: Option<TypedExpr>) -> Self {
+        VarDecl { oid, tid, expr }
     }
 }
 
 impl ArgDecl {
     pub fn new(id: String, tid: String) -> Self {
         ArgDecl { id, tid }
+    }
+}
+
+impl CaseBranch {
+    pub fn new(id: String, tid: String, expr: TypedExpr) -> Self {
+        CaseBranch { id, tid, expr }
     }
 }

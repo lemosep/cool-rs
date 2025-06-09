@@ -123,3 +123,22 @@ impl fmt::Display for LexicalError {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StringLiteralError {
+    Unterminated,            // e.g. a string that never closed with a quote
+    InvalidEscapeSequence,   // e.g. "\z" or an unsupported backslash code
+}
+
+impl fmt::Display for StringLiteralError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            StringLiteralError::Unterminated => {
+                write!(f, "Unterminated string literal")
+            }
+            StringLiteralError::InvalidEscapeSequence => {
+                write!(f, "Invalid escape sequence in string literal")
+            }
+        }
+    }
+}
